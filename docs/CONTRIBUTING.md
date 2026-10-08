@@ -1,6 +1,8 @@
 # Developer Contributing Guide
 
-Panduan pengembangan, konvensi kode, dan Vibe Coding rules untuk tim dev & AI Assistant di project **Web Buku Angkatan**.
+Panduan Git Flow, konvensi commit, dan Vibe Coding rules untuk tim dev & AI Assistant di project **Web Buku Angkatan**.
+
+> 📖 **Butuh panduan setup & menjalankan project secara lokal?** Lihat [README.md](../README.md) di root project.
 
 ---
 
@@ -51,7 +53,7 @@ project-buku-angkatan/
 │   │   │   └── admin/{students,emergencies,config,audit-logs,export}/route.ts
 │   │   └── (pages)             # Landing, /unlock, /directory, /gallery, /admin/*
 │   ├── lib/
-│   │   ├── db/                 # Prisma / Drizzle Client Setup
+│   │   ├── db/                 # Drizzle Client Setup
 │   │   │   └── client.ts
 │   │   ├── auth/               # JWT, session, OTP, guards
 │   │   │   ├── jwt.ts
@@ -76,60 +78,52 @@ project-buku-angkatan/
 
 ---
 
-## 3. Local Development Setup
+## 3. Git Flow & Branching Strategy
 
-### 1. Clone & Install Dependencies
-```bash
-git clone https://github.com/your-repo/project-buku-angkatan.git
-cd project-buku-angkatan
-npm install
-```
+### Branch Utama
+- `main` — branch produksi. **Hanya** menerima merge dari PR yang sudah direview & lolos.
+- `develop` — branch integrasi untuk pengembangan harian.
 
-### 2. Configure Environment Variables
-Salin `.env.example` ke `.env.local`:
-```bash
-cp .env.example .env.local
-```
+### Branch Kerja (feature/fix)
+Buat branch baru dari `develop` untuk setiap pekerjaan:
 
-Isi variabel environment berikut (lihat juga `docs/ARCHITECTURE.md` Section 6):
+| Tipe | Pola Nama | Contoh |
+| :--- | :--- | :--- |
+| Fitur baru | `feat/<deskripsi-singkat>` | `feat/student-directory-api` |
+| Perbaikan bug | `fix/<deskripsi-singkat>` | `fix/whatsapp-sanitizer` |
+| Dokumentasi | `docs/<deskripsi-singkat>` | `docs/api-contracts-update` |
+| Maintenance | `chore/<deskripsi-singkat>` | `chore/update-deps` |
 
-| Variabel | Keterangan |
-| :--- | :--- |
-| `DATABASE_URL` | Koneksi Supabase pooler (port 6543) untuk runtime |
-| `DIRECT_URL` | Koneksi direct Supabase (port 5432) untuk migrasi |
-| `AUTH_JWT_SECRET` | Secret 32+ char untuk menandatangani JWT (student & admin) |
-| `RESEND_API_KEY` | API key Resend untuk kirim OTP admin |
-| `RESEND_FROM_EMAIL` | Alamat pengirim email OTP (domain terverifikasi Resend) |
-| `R2_ACCOUNT_ID` | Cloudflare Account ID |
-| `R2_ACCESS_KEY_ID` | R2 API token access key |
-| `R2_SECRET_ACCESS_KEY` | R2 API token secret key |
-| `R2_BUCKET_NAME` | Nama bucket R2 (mis. `buku-angkatan-assets`) |
-| `R2_PUBLIC_DOMAIN` | Domain publik/CDN aset R2 |
+### Alur Kerja Standar
+1. `git checkout develop` → `git pull` (pastikan branch terbaru).
+2. `git checkout -b feat/nama-fitur`.
+3. Kerjakan perubahan, lalu commit (lihat konvensi di bawah).
+4. `git push origin feat/nama-fitur`.
+5. Buka **Pull Request** ke `develop`, minta review minimal 1 orang.
+6. Setelah di-approve & CI lolos → merge.
 
-> **Catatan**: Tidak ada `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` — aplikasi tidak memakai Supabase Auth. Passcode angkatan & `auth_epoch` disimpan di tabel `app_config` (bukan env). Whitelist admin dikelola langsung via SQL/Table Editor Supabase.
-
-### 3. Database Migration
-Jalankan migrasi ke Supabase DB:
-```bash
-npx prisma db push # atau drizzle-kit push
-```
-
-### 4. Run Development Server
-Gunakan `netlify dev` untuk menyimulasikan environment serverless Netlify secara lokal:
-```bash
-npx netlify dev
-```
-Atau run via Next.js standard dev server:
-```bash
-npm run dev
-```
+### Aturan Pull Request
+- Judul PR mengikuti format commit (mis. `feat: add GET /api/students`).
+- Sertakan deskripsi singkat: apa yang diubah & kenapa.
+- Pastikan `npm run build` / lint lolos sebelum minta review.
+- Jangan merge PR ke `main` langsung tanpa lewat `develop` (kecuali hotfix darurat).
 
 ---
 
 ## 4. Git & Commit Guidelines
 
-Gunakan format Conventional Commits:
+Gunakan format **Conventional Commits**:
+
 - `feat:` Fitur baru (misal: `feat: add GET /api/students search query`)
 - `fix:` Bug fix (misal: `fix: sanitize whatsapp starting with 8`)
 - `docs:` Pembaruan dokumentasi
 - `chore:` Maintenance config / dependency update
+- `refactor:` Perubahan kode tanpa mengubah perilaku
+- `test:` Menambah / memperbaiki test
+
+**Contoh commit yang baik:**
+```
+feat: add passcode authentication endpoint
+fix: handle whatsapp number starting with 8
+docs: update RBAC section in architecture
+```
