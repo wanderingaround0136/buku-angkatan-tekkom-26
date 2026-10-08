@@ -1,29 +1,39 @@
 # API Contracts & Specification
 
-Dokumen API Contracts untuk backend **Web Buku Angkatan**. 
+Dokumen API Contracts untuk backend **Web Buku Angkatan**.
 
 ---
 
-## 1. Global JSON Response Format
+## 1. Access Level Legend
 
-Seluruh API response menggunakan struktur standar berikut:
+| Simbol | Level | Deskripsi |
+| :---: | :--- | :--- |
+| 🔓 | **Public** | Tanpa autentikasi (`guest`) |
+| 🔐 | **Protected** | Butuh Angkatan Passcode (`role = student` atau `admin`) |
+| 🛡️ | **Admin Only** | Butuh sesi admin (whitelist email + OTP) |
 
-### Success Response Format
+Hierarki: `guest < student < admin`. Admin otomatis lolos guard 🔐.
+
+**Status code guard:**
+- `401 Unauthorized` — belum terautentikasi / sesi dicabut (epoch mismatch).
+- `403 Forbidden` — terautentikasi tapi role kurang.
+- `429 Too Many Requests` — rate limit.
+
+---
+
+## 2. Global JSON Response Format
+
+### Success Response
 ```json
 {
   "success": true,
   "data": {},
-  "meta": {
-    "page": 1,
-    "limit": 20,
-    "total": 120,
-    "total_pages": 6
-  }
+  "meta": { "page": 1, "limit": 20, "total": 120, "total_pages": 6 }
 }
 ```
-*(Catatan: Object `meta` bersifat opsional, hanya muncul pada endpoint berkoleksi/paginated)*
+*(`meta` opsional, hanya pada endpoint koleksi/paginated)*
 
-### Error Response Format
+### Error Response
 ```json
 {
   "success": false,
@@ -31,112 +41,117 @@ Seluruh API response menggunakan struktur standar berikut:
     "code": "BAD_REQUEST",
     "message": "Validation failed",
     "details": [
-      {
-        "field": "whatsapp_number",
-        "message": "Invalid WhatsApp number format. Must start with 628"
-      }
+      { "field": "whatsapp_number", "message": "Invalid WhatsApp number format. Must start with 628" }
     ]
   }
 }
 ```
 
----
-
-## 2. API Endpoints
-
-### A. Public Endpoints (Data Mahasiswa & Kelas)
-
-#### 1. `GET /api/students`
-Mengambil daftar mahasiswa angkatan dengan pagination, filter kelas, dan pencarian nama/NIM.
-
-- **Query Parameters**:
-  - `page` (optional, default: `1`): Nomor halaman.
-  - `limit` (optional, default: `20`): Jumlah data per halaman.
-  - `class` (optional): Filter kelas (`A`, `B`, `C`, `D`).
-  - `search` (optional): Keyword pencarian nama lengkap, nama panggilan, atau NIM.
-
-- **Response `200 OK`**:
+### Guard Error Responses
 ```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "c7b8e1a0-4f2b-4d3a-8f1e-9a0b1c2d3e4f",
-      "nim": "21000123",
-      "full_name": "Ahmad Subekti",
-      "nickname": "Bekti",
-      "class_name": "A",
-      "origin_city": "Semarang",
-      "profile": {
-        "formal_photo_url": "https://cdn.bukuangkatan.com/formal/21000123.jpg",
-        "quote": "Belajar terus sampai faham.",
-        "hobbies": ["Coding", "Fotografi"]
-      }
-    }
-  ],
-  "meta": {
-    "page": 1,
-    "limit": 20,
-    "total": 120,
-    "total_pages": 6
-  }
-}
+// 401 — passcode belum dimasukkan / sesi kedaluwarsa / dicabut
+{ "success": false, "error": { "code": "UNAUTHORIZED", "message": "Angkatan passcode required" } }
+
+// 403 — role kurang (student akses admin-only)
+{ "success": false, "error": { "code": "FORBIDDEN", "message": "Admin access required" } }
 ```
 
 ---
 
-#### 2. `GET /api/students/:nim`
-Mengambil detail profil lengkap mahasiswa berdasarkan NIM.
+## 3. Auth Endpoints
 
-- **Path Parameters**:
-  - `nim`: String (Contoh: `21000123`)
+### 3.1 Student — Angkatan Passcode
+
+#### 🔓 `POST /api/auth/passcode`
+Verifikasi Angkatan Passcode, set cookie `angkatan_session` (JWT HttpOnly).
+
+- **Request Body**: `{ "passcode": "angkatan2022secret" }`
+- **Response `200 OK`**:
+```json
+{ "success": true, "data": { "role": "student", "expires_in": 604800 } }
+```
+- **Response `401 Unauthorized`**:
+```json
+{ "success": false, "error": { "code": "INVALID_PASSCODE", "message": "Passcode salah" } }
+```
+- **Response `429 Too Many Requests`** (5x / 15 menit / IP):
+```json
+{ "success": false, "error": { "code": "RATE_LIMITED", "message": "Terlalu banyak percobaan, coba lagi nanti" } }
+```
+> Set-Cookie: `angkatan_session=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`
+> Audit: `PASSCODE_FAIL` saat gagal.
+
+#### 🔓 `DELETE /api/auth/passcode`
+Logout student — clear cookie `angkatan_session`.
+
+- **Response `200 OK`**: `{ "success": true, "data": { "message": "Logged out" } }`
+
+### 3.2 Admin — Whitelist Email + OTP
+
+#### 🔓 `POST /api/auth/admin/request-otp`
+Kirim OTP 6 digit ke email admin (harus terdaftar di `admin_whitelist`).
+
+- **Request Body**: `{ "email": "pengurus@gmail.com" }`
+- **Response `200 OK`** (SELALU 200 generik — anti email-enumeration, baik email terdaftar maupun tidak):
+```json
+{ "success": true, "data": { "message": "Jika email terdaftar, kode OTP telah dikirim." } }
+```
+- **Response `429 Too Many Requests`**:
+```json
+{ "success": false, "error": { "code": "RATE_LIMITED", "message": "Terlalu banyak permintaan OTP" } }
+```
+> OTP: 6 digit, expiry 5 menit, single-use. Dikirim via Resend.
+
+#### 🔓 `POST /api/auth/admin/verify-otp`
+Verifikasi OTP dan set cookie `admin_session` (JWT HttpOnly).
+
+- **Request Body**: `{ "email": "pengurus@gmail.com", "otp": "123456" }`
+- **Response `200 OK`**:
+```json
+{ "success": true, "data": { "role": "admin", "email": "pengurus@gmail.com" } }
+```
+- **Response `401 Unauthorized`**:
+```json
+{ "success": false, "error": { "code": "INVALID_OTP", "message": "OTP salah atau kedaluwarsa" } }
+```
+> Set-Cookie: `admin_session=<jwt>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=28800`
+> Audit: `ADMIN_LOGIN` (sukses) / `ADMIN_LOGIN_FAIL` (gagal).
+
+#### 🔓 `POST /api/auth/admin/logout`
+Logout admin — clear cookie `admin_session` (aman dipanggil tanpa sesi aktif).
+
+#### 🔓 `GET /api/auth/session`
+Status sesi aktif (untuk UI). Sesi dengan `epoch` lama dianggap invalid.
+
+- **Response `200 OK`**:
+```json
+{ "success": true, "data": { "role": "guest" } }
+{ "success": true, "data": { "role": "student" } }
+{ "success": true, "data": { "role": "admin", "email": "pengurus@gmail.com" } }
+```
+
+---
+
+## 4. Public Endpoints (Landing Page)
+
+#### 🔓 `GET /api/public/stats`
+Statistik agregat angkatan. **Tanpa data personal.**
 
 - **Response `200 OK`**:
 ```json
 {
   "success": true,
   "data": {
-    "id": "c7b8e1a0-4f2b-4d3a-8f1e-9a0b1c2d3e4f",
-    "nim": "21000123",
-    "full_name": "Ahmad Subekti",
-    "nickname": "Bekti",
-    "class_name": "A",
-    "religion": "ISLAM",
-    "birth_place": "Semarang",
-    "birth_date": "2002-08-17",
-    "origin_city": "Semarang",
-    "contact": {
-      "whatsapp_number": "6281234567890",
-      "instagram_handle": "ahmadbekti",
-      "boarding_address": "Jl. Telekomunikasi No. 1, Bojongsoang, Bandung"
-    },
-    "profile": {
-      "hobbies": ["Coding", "Fotografi", "Basket"],
-      "quote": "Belajar terus sampai faham.",
-      "favorite_food_place": "Warung Bu Siti Bojongsoang",
-      "spotify_track_url": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
-      "formal_photo_url": "https://cdn.bukuangkatan.com/formal/21000123.jpg",
-      "informal_photo_url": "https://cdn.bukuangkatan.com/informal/21000123.jpg"
-    }
+    "total_students": 122,
+    "total_classes": 4,
+    "hero_title": "Buku Angkatan 2022",
+    "hero_subtitle": "Kenalan lebih dekat dengan angkatan kita."
   }
 }
 ```
 
-- **Response `404 Not Found`**:
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Student with NIM 21000123 was not found"
-  }
-}
-```
-
----
-
-#### 3. `GET /api/classes`
-Mengambil rekapitulasi daftar kelas angkatan beserta total mahasiswa.
+#### 🔓 `GET /api/classes`
+Rekapitulasi jumlah mahasiswa per kelas.
 
 - **Response `200 OK`**:
 ```json
@@ -153,20 +168,102 @@ Mengambil rekapitulasi daftar kelas angkatan beserta total mahasiswa.
 
 ---
 
-### B. Storage & Upload Endpoints
+## 5. Protected Endpoints (Angkatan Passcode)
 
-#### `POST /api/upload`
-Membuat Presigned PUT URL Cloudflare R2 untuk upload foto mahasiswa secara langsung dari client.
+#### 🔐 `GET /api/students`
+Direktori mahasiswa dengan pagination, filter kelas, dan pencarian.
 
-- **Request Body**:
+- **Query Parameters**: `page` (default 1), `limit` (default 20), `class` (`A|B|C|D`), `search` (nama/NIM)
+- **Response `200 OK`**:
 ```json
 {
-  "filename": "21000123-formal.jpg",
-  "file_type": "image/jpeg",
-  "folder": "formal"
+  "success": true,
+  "data": [
+    {
+      "id": "c7b8e1a0-4f2b-4d3a-8f1e-9a0b1c2d3e4f",
+      "nim": "21000123",
+      "full_name": "Ahmad Subekti",
+      "nickname": "Bekti",
+      "class_name": "A",
+      "origin_city": "Semarang",
+      "instagram_handle": "ahmadbekti",
+      "profile": {
+        "formal_photo_url": "https://cdn.bukuangkatan.com/formal/21000123.jpg",
+        "quote": "Belajar terus sampai faham.",
+        "hobbies": ["Coding", "Fotografi"]
+      }
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 122, "total_pages": 7 }
 }
 ```
 
+#### 🔐 `GET /api/students/:nim`
+Detail profil mahasiswa (data untuk `student` — **tanpa WA pribadi & alamat kost**).
+
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "c7b8e1a0-4f2b-4d3a-8f1e-9a0b1c2d3e4f",
+    "nim": "21000123",
+    "full_name": "Ahmad Subekti",
+    "nickname": "Bekti",
+    "class_name": "A",
+    "religion": "ISLAM",
+    "birth_place": "Semarang",
+    "birth_date": "2002-08-17",
+    "origin_city": "Semarang",
+    "instagram_handle": "ahmadbekti",
+    "profile": {
+      "hobbies": ["Coding", "Fotografi", "Basket"],
+      "quote": "Belajar terus sampai faham.",
+      "favorite_food_place": "Warung Bu Siti Bojongsoang",
+      "spotify_track_url": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+      "formal_photo_url": "https://cdn.bukuangkatan.com/formal/21000123.jpg",
+      "informal_photo_url": "https://cdn.bukuangkatan.com/informal/21000123.jpg"
+    }
+  }
+}
+```
+> ⚠️ **Tidak ada** `whatsapp_number` dan `boarding_address` — keduanya admin-only.
+
+- **Response `404 Not Found`**:
+```json
+{ "success": false, "error": { "code": "NOT_FOUND", "message": "Student with NIM 21000123 was not found" } }
+```
+
+#### 🔐 `GET /api/gallery`
+Galeri foto seluruh angkatan (formal & non-formal).
+
+- **Query Parameters**: `page`, `limit`, `class` (opsional)
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "nim": "21000123",
+      "full_name": "Ahmad Subekti",
+      "formal_photo_url": "https://cdn.bukuangkatan.com/formal/21000123.jpg",
+      "informal_photo_url": "https://cdn.bukuangkatan.com/informal/21000123.jpg"
+    }
+  ],
+  "meta": { "page": 1, "limit": 24, "total": 122, "total_pages": 6 }
+}
+```
+
+---
+
+## 6. Admin Endpoints (Restricted)
+
+> Semua endpoint 🛡️ memerlukan sesi `admin_session` yang valid (JWT + epoch cocok). **Semua mutasi data & upload hanya admin.**
+
+#### 🛡️ `POST /api/upload`
+Presigned PUT URL Cloudflare R2 (upload/ganti foto).
+
+- **Request Body**: `{ "filename": "21000123-formal.jpg", "file_type": "image/jpeg", "folder": "formal" }`
 - **Response `200 OK`**:
 ```json
 {
@@ -178,14 +275,86 @@ Membuat Presigned PUT URL Cloudflare R2 untuk upload foto mahasiswa secara langs
   }
 }
 ```
+> Presigned URL expired dalam 5 menit.
+
+#### 🛡️ `GET /api/admin/emergencies`
+Data darurat (kontak ortu & ibu/bapak kost). **Satu-satunya endpoint yang mengembalikan `student_emergencies`.**
+
+- **Query Parameters**: `page`, `limit`, `class`, `search`
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "nim": "21000123",
+      "full_name": "Ahmad Subekti",
+      "parent_whatsapp": "6281200000001",
+      "landlord_whatsapp": "6281200000002"
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 122, "total_pages": 7 }
+}
+```
+> Audit: `READ_EMERGENCIES` dicatat tiap akses.
+
+#### 🛡️ `GET /api/admin/students` · `POST /api/admin/students`
+Kelola data siswa (list lengkap termasuk WA pribadi & alamat kost, serta create).
+
+#### 🛡️ `GET /api/admin/students/:nim` · `PATCH` · `DELETE`
+Detail/edit/hapus data siswa (full field, termasuk kontak pribadi). Audit: `MUTATE_STUDENT`.
+
+#### 🛡️ `PATCH /api/admin/config`
+Ganti Angkatan Passcode dan/atau increment `auth_epoch`.
+
+- **Request Body**:
+```json
+{ "key": "angkatan_passcode", "new_passcode": "newSecret2024" }
+```
+- **Response `200 OK`**:
+```json
+{ "success": true, "data": { "updated_at": "2024-06-01T10:00:00Z", "epoch": 6 } }
+```
+> Ganti passcode otomatis menaikkan `auth_epoch` → seluruh sesi student lama langsung mati.
+> Audit: `ROTATE_PASSCODE`.
+
+#### 🛡️ `GET /api/admin/audit-logs`
+Jejak audit (pagination + filter `action`, `actor_email`, rentang tanggal).
+
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "actor_email": "pengurus@gmail.com",
+      "actor_role": "admin",
+      "action": "READ_EMERGENCIES",
+      "target": null,
+      "ip": "103.x.x.x",
+      "created_at": "2024-06-01T10:00:00Z"
+    }
+  ],
+  "meta": { "page": 1, "limit": 50, "total": 320, "total_pages": 7 }
+}
+```
+
+#### 🛡️ `GET /api/admin/export`
+Ekspor seluruh data (termasuk kontak darurat) ke CSV/XLSX.
 
 ---
 
-## 3. Privacy & Restricted Data Policy
+## 7. Privacy & Restricted Data Policy
 
 🔒 **STRICT GUARANTEE**:
-Seluruh endpoint publik di atas (`GET /api/students`, `GET /api/students/:nim`, `GET /api/classes`) **SAMA SEKALI TIDAK TEREKSPOS** dan **EKSPLISIT MEMBUANG** field data sensitif/darurat dari tabel `student_emergencies`:
-- `parent_whatsapp` (Nomor WA Orang Tua)
-- `landlord_whatsapp` (Nomor WA Ibu/Bapak Kost)
 
-Data privat hanya dapat diakses melalui internal script seeder atau endpoint internal terproteksi khusus role Admin dengan otentikasi Supabase.
+1. Tabel `student_emergencies` (`parent_whatsapp`, `landlord_whatsapp`) **HANYA** dapat diakses via `GET /api/admin/emergencies` dan `GET /api/admin/export` — keduanya ber-guard 🛡️ Admin Only.
+
+2. Field **No WhatsApp Pribadi** (`student_contacts.whatsapp_number`) dan **Alamat Kost** (`student_contacts.boarding_address`) **tidak pernah** muncul di endpoint 🔓 Public maupun 🔐 Protected. Hanya endpoint 🛡️ Admin yang mengembalikannya.
+
+3. Endpoint 🔓 Public (`GET /api/public/stats`, `GET /api/classes`) hanya mengembalikan **data agregat** — tanpa identitas personal.
+
+4. Angkatan Passcode disimpan sebagai **bcrypt hash** di `app_config`; OTP admin disimpan sebagai **hash** di `admin_otp`. Keduanya tidak pernah plaintext dan tidak pernah dikirim ke client.
+
+5. Seluruh akses data sensitif dicatat di `audit_logs`.
