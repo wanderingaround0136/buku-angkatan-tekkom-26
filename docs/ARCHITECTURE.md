@@ -401,10 +401,11 @@ sequenceDiagram
     API->>DB: SELECT value WHERE key='angkatan_passcode'
     DB-->>API: bcrypt hash
     API->>API: bcrypt.compare(passcode, hash)
+
     alt passcode valid
         API->>DB: SELECT value WHERE key='auth_epoch'
         API->>API: jose.sign({ role:'student', epoch }, AUTH_JWT_SECRET, { exp:'7d' })
-        API->>C: Set-Cookie angkatan_session=<jwt>; HttpOnly; Secure; SameSite=Lax
+        API->>C: Set-Cookie: angkatan_session=<jwt>, HttpOnly, Secure, SameSite=Lax
         API-->>U: 200 { success:true, role:'student' }
     else passcode salah
         API->>DB: INSERT audit_logs (PASSCODE_FAIL)
