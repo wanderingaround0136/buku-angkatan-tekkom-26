@@ -91,25 +91,20 @@ Salin `.env.example` ke `.env.local`:
 cp .env.example .env.local
 ```
 
-Isi variabel environment berikut:
-```env
-DATABASE_URL="postgres://postgres.[ref]:[pass]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true"
-DIRECT_URL="postgres://postgres.[ref]:[pass]@aws-0-[region].supabase.com:5432/postgres"
+Isi variabel environment berikut (lihat juga `docs/ARCHITECTURE.md` Section 6):
 
-# Auth (custom JWT via jose — student passcode & admin OTP)
-AUTH_JWT_SECRET="random-32-char-minimum-secret"
-
-# Email OTP (Resend)
-RESEND_API_KEY="re_xxxxxxxx"
-RESEND_FROM_EMAIL="no-reply@bukuangkatan.com"
-
-# Object Storage (Cloudflare R2)
-R2_ACCOUNT_ID="your_cloudflare_account_id"
-R2_ACCESS_KEY_ID="your_r2_access_key_id"
-R2_SECRET_ACCESS_KEY="your_r2_secret_access_key"
-R2_BUCKET_NAME="buku-angkatan-assets"
-R2_PUBLIC_DOMAIN="https://cdn.bukuangkatan.com"
-```
+| Variabel | Keterangan |
+| :--- | :--- |
+| `DATABASE_URL` | Koneksi Supabase pooler (port 6543) untuk runtime |
+| `DIRECT_URL` | Koneksi direct Supabase (port 5432) untuk migrasi |
+| `AUTH_JWT_SECRET` | Secret 32+ char untuk menandatangani JWT (student & admin) |
+| `RESEND_API_KEY` | API key Resend untuk kirim OTP admin |
+| `RESEND_FROM_EMAIL` | Alamat pengirim email OTP (domain terverifikasi Resend) |
+| `R2_ACCOUNT_ID` | Cloudflare Account ID |
+| `R2_ACCESS_KEY_ID` | R2 API token access key |
+| `R2_SECRET_ACCESS_KEY` | R2 API token secret key |
+| `R2_BUCKET_NAME` | Nama bucket R2 (mis. `buku-angkatan-assets`) |
+| `R2_PUBLIC_DOMAIN` | Domain publik/CDN aset R2 |
 
 > **Catatan**: Tidak ada `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` — aplikasi tidak memakai Supabase Auth. Passcode angkatan & `auth_epoch` disimpan di tabel `app_config` (bukan env). Whitelist admin dikelola langsung via SQL/Table Editor Supabase.
 

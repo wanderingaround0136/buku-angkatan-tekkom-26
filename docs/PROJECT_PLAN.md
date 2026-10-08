@@ -17,7 +17,7 @@ Model akses: **3 role** — `guest` (landing saja), `student` (passcode → dire
 ## Checklist Implementasi
 
 ### Milestone 0: Infrastructure, Schema & Security Baseline
-- [x] Buat dokumen perencanaan (`docs/` folder & `README.md`).
+- [ ] Buat dokumen perencanaan (`docs/` folder & `README.md`).
 - [ ] Setup Project Supabase (PostgreSQL DB).
 - [ ] Setup Bucket Cloudflare R2 (`buku-angkatan-assets`) & Custom Domain CDN / Public R2 URL.
 - [ ] Konfigurasi CORS pada Cloudflare R2 bucket untuk presigned upload URL.

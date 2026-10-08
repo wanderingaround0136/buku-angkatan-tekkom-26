@@ -129,29 +129,20 @@ npx tsx scripts/seed-from-csv.ts data/input.csv --dry-run
 Selain data mahasiswa, ada dua data bootstrap yang perlu di-seed agar sistem akses berfungsi. Keduanya **bukan** dari CSV Google Form.
 
 ### A. Passcode Angkatan & Auth Epoch (`app_config`)
-Disimpan sebagai bcrypt hash (bukan plaintext):
+Disimpan sebagai bcrypt hash (bukan plaintext). Dua baris yang perlu disisipkan:
 
-```sql
-INSERT INTO app_config (key, value, description) VALUES
-  ('angkatan_passcode', '<BCRYPT_HASH>', 'Shared secret akses directory & galeri'),
-  ('auth_epoch',        '1',             'Epoch sesi; increment untuk cabut semua sesi');
-```
+| key | value | deskripsi |
+| :--- | :--- | :--- |
+| `angkatan_passcode` | bcrypt hash passcode | Shared secret akses directory & galeri |
+| `auth_epoch` | `1` (integer) | Epoch sesi; increment untuk mencabut semua sesi |
 
-Script helper (opsional) dapat menyediakan `scripts/seed-auth.ts` yang men-generate hash:
-```bash
-npx tsx scripts/seed-auth.ts --passcode "angkatan2022secret"
-```
+Script helper (opsional) `scripts/seed-auth.ts` dapat men-generate hash dan menyisipkan baris di atas, dipanggil dengan argumen passcode, contoh: `npx tsx scripts/seed-auth.ts --passcode "angkatan2022secret"`.
 
 ### B. Whitelist Admin (`admin_whitelist`)
-Dikelola **langsung via SQL / Supabase Table Editor** (bukan via API dashboard). Whitelist bersifat **per email individu**, bukan domain:
+Dikelola **langsung via SQL / Supabase Table Editor** (bukan via API dashboard). Whitelist bersifat **per email individu**, bukan domain.
 
-```sql
-INSERT INTO admin_whitelist (email, display_name, is_active)
-VALUES ('pengurus@gmail.com', 'Pengurus 1', true);
-```
+**Menambah admin**: sisipkan baris baru dengan `email` (lowercase), `display_name`, dan `is_active = true`.
 
-**Mencabut akses admin**: set `is_active = false`, lalu increment `auth_epoch` agar sesi aktif langsung mati:
-```sql
-UPDATE admin_whitelist SET is_active = false WHERE email = 'pengurus@gmail.com';
-UPDATE app_config SET value = (value::int + 1)::text WHERE key = 'auth_epoch';
-```
+**Mencabut akses admin**: lakukan dua langkah:
+1. Set `is_active = false` pada baris `admin_whitelist` dengan email terkait.
+2. Increment nilai `auth_epoch` di `app_config` agar seluruh sesi admin yang sedang aktif langsung mati.

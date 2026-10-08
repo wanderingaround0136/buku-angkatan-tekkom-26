@@ -233,25 +233,12 @@ Karena aplikasi **tidak** memakai Supabase Auth, penegakan akses utama ada di **
 
 **Prinsip**: Aplikasi hanya mengakses DB via koneksi server-side (Postgres direct). RLS dikonfigurasi untuk **menolak seluruh akses dari role `anon` dan `authenticated`**, sehingga tabel hanya bisa diakses oleh koneksi privileged (role `postgres` / service role) yang dipakai backend.
 
-```sql
--- Enable RLS on all tables
-ALTER TABLE students            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE student_contacts    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE student_profiles    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE student_emergencies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE app_config          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE admin_whitelist     ENABLE ROW LEVEL SECURITY;
-ALTER TABLE admin_otp           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs          ENABLE ROW LEVEL SECURITY;
+**Spesifikasi kebijakan RLS (high-level):**
 
--- Tidak ada policy untuk role `anon` / `authenticated`.
--- Tanpa policy + RLS aktif => SEMUA akses dari kedua role tsb DITOLAK.
--- Backend memakai koneksi Postgres privileged (role postgres) yang melewati RLS,
--- dan WAJIB menerapkan pembatasan field/role di layer aplikasi (guards).
-
--- Cabut akses langsung ke schema public dari anon/authenticated (opsional, paling ketat)
-REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
-```
+1. **Aktifkan RLS** pada seluruh tabel aplikasi: `students`, `student_contacts`, `student_profiles`, `student_emergencies`, `app_config`, `admin_whitelist`, `admin_otp`, `audit_logs`.
+2. **Tidak membuat policy apa pun** untuk role `anon` / `authenticated`. Dengan RLS aktif tanpa policy, **semua akses dari kedua role tersebut otomatis ditolak** (deny-by-default).
+3. **Cabut (revoke) hak akses tabel** di schema `public` dari role `anon` dan `authenticated` sebagai lapis tambahan (opsional, paling ketat).
+4. Backend tetap dapat membaca/menulis karena memakai koneksi Postgres privileged yang **melewati RLS**.
 
 > **Konsekuensi penting**: Karena RLS di-bypass oleh koneksi backend, maka **satu-satunya penegak** pembatasan akses adalah kode aplikasi. Semua endpoint wajib melewati guard (`requireStudent` / `requireAdmin`) dan query WAJIB memilih kolom secara eksplisit (tidak boleh `SELECT *` pada `student_contacts`/`student_emergencies` untuk endpoint non-admin). Lihat Section 7.
 
@@ -277,116 +264,59 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 
 > **Semua aksi upload & ganti image hanya untuk admin** (guard 🛡️). Student tidak pernah mendapat presigned URL.
 
-### Storage Helpers (`src/lib/storage/r2.ts`)
+### Alur Logika Storage Helper (pseudocode)
 
-```typescript
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-
-export const r2Client = new S3Client({
-  region: "auto",
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-  },
-});
-
-export async function generateUploadUrl(key: string, contentType: string) {
-  const command = new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME!,
-    Key: key,
-    ContentType: contentType,
-  });
-
-  const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 300 }); // 5 menit
-  const publicUrl = `${process.env.R2_PUBLIC_DOMAIN}/${key}`;
-
-  return { uploadUrl, publicUrl, key };
-}
-```
+- **Inisialisasi R2 client**: S3 client dengan `region = auto`, endpoint `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`, dan kredensial dari env (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`).
+- **`generateUploadUrl(key, contentType)`**:
+  1. Buat perintah upload object (PUT) ke bucket `R2_BUCKET_NAME` dengan `key` dan `contentType` yang diminta.
+  2. Tanda-tangani perintah tersebut menjadi **presigned URL** dengan masa berlaku **5 menit**.
+  3. Bentuk `publicUrl` = `<R2_PUBLIC_DOMAIN>/<key>`.
+  4. Kembalikan `{ uploadUrl, publicUrl, key }`.
+- Presigned URL hanya boleh dibuat setelah request melewati guard admin.
 
 ---
 
-## 5. Zod Validation Schemas (`src/lib/validations/student.ts`)
+## 5. Validation Layer Specification
 
-```typescript
-import { z } from "zod";
+Semua input (API handler & seeder) divalidasi dengan Zod. Lokasi file: `src/lib/validations/student.ts` (+ `auth.ts`).
 
-// Helper sanitizers
-export const sanitizeWhatsApp = (val: string): string => {
-  let cleaned = val.replace(/\D/g, "");
-  if (cleaned.startsWith("0")) return "62" + cleaned.slice(1);
-  if (cleaned.startsWith("8")) return "62" + cleaned;
-  return cleaned;
-};
+### 5.1 Sanitizer Helpers
 
-export const sanitizeInstagram = (val: string): string => {
-  let cleaned = val.trim();
-  cleaned = cleaned.replace(/https?:\/\/(www\.)?instagram\.com\//i, "");
-  cleaned = cleaned.replace(/^@/, "");
-  return cleaned.replace(/\/$/, "");
-};
+| Helper | Aturan |
+| :--- | :--- |
+| `sanitizeWhatsApp` | Buang karakter non-digit; normalisasi awalan `08…` / `+628…` / `8…` → `628…`. Hasil harus cocok `^628\d{8,12}$` |
+| `sanitizeInstagram` | Trim; buang prefix URL `instagram.com/`; buang `@` di awal; buang trailing `/` |
+| `parseBirthDate` | Terima `DD/MM/YYYY`, `YYYY-MM-DD`, atau format teks → normalisasi ke ISO Date |
 
-export const studentBaseSchema = z.object({
-  nim: z.string().min(5).max(20),
-  full_name: z.string().min(2).max(100),
-  nickname: z.string().min(1).max(50),
-  class_name: z.enum(["A", "B", "C", "D"]),
-  religion: z.enum(["ISLAM", "PROTESTANT", "CATHOLIC", "HINDU", "BUDDHA", "KHONGHUCU", "OTHER"]),
-  birth_place: z.string().min(2),
-  birth_date: z.coerce.date(),
-  origin_city: z.string().min(2),
-});
+### 5.2 Skema Validasi
 
-export const studentContactSchema = z.object({
-  whatsapp_number: z.string().transform(sanitizeWhatsApp).pipe(z.string().regex(/^628\d{8,12}$/)),
-  instagram_handle: z.string().transform(sanitizeInstagram),
-  boarding_address: z.string().min(5),
-});
-
-export const studentProfileSchema = z.object({
-  hobbies: z.array(z.string()),
-  quote: z.string().max(500),
-  favorite_food_place: z.string().max(200),
-  spotify_track_url: z.string().url().or(z.literal("")),
-  formal_photo_url: z.string().url(),
-  informal_photo_url: z.string().url(),
-});
-
-export const studentEmergencySchema = z.object({
-  parent_whatsapp: z.string().transform(sanitizeWhatsApp).pipe(z.string().regex(/^628\d{8,12}$/)),
-  landlord_whatsapp: z.string().transform(sanitizeWhatsApp).pipe(z.string().regex(/^628\d{8,12}$/)).or(z.literal("")),
-});
-
-// Auth schemas
-export const passcodeSchema = z.object({ passcode: z.string().min(1) });
-
-export const adminEmailSchema = z.object({ email: z.string().email().toLowerCase() });
-
-export const verifyOtpSchema = z.object({
-  email: z.string().email().toLowerCase(),
-  otp: z.string().regex(/^\d{6}$/),
-});
-```
+| Skema | Field & Aturan |
+| :--- | :--- |
+| `studentBaseSchema` | `nim` (5–20 char), `full_name` (2–100), `nickname` (1–50), `class_name` (enum A–D), `religion` (enum), `birth_place` (≥2), `birth_date` (date), `origin_city` (≥2) |
+| `studentContactSchema` | `whatsapp_number` (sanitize → regex `628`), `instagram_handle` (sanitize), `boarding_address` (≥5) |
+| `studentProfileSchema` | `hobbies` (array string), `quote` (≤500), `favorite_food_place` (≤200), `spotify_track_url` (URL atau kosong), `formal_photo_url` (URL), `informal_photo_url` (URL) |
+| `studentEmergencySchema` | `parent_whatsapp` (sanitize → regex `628`), `landlord_whatsapp` (sanitize → regex `628` atau kosong) |
+| `passcodeSchema` | `passcode` (≥1) |
+| `adminEmailSchema` | `email` (format email, di-lowercase) |
+| `verifyOtpSchema` | `email` (format email, lowercase), `otp` (6 digit numerik) |
+| `paginationSchema` | `page` (≥1, default 1), `limit` (1–100, default 20), filter/sort opsional |
 
 ---
 
 ## 6. Deployment & Netlify Environment Config
 
-### `netlify.toml` Configuration
+### Netlify Configuration (deskripsi)
 
-```toml
-[build]
-  command = "npm run build"
-  publish = ".next"
+File `netlify.toml` di root project menetapkan:
 
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
+| Setting | Nilai |
+| :--- | :--- |
+| Build command | `npm run build` |
+| Publish directory | `.next` |
+| Plugin | `@netlify/plugin-nextjs` (adapter Next.js App Router → serverless) |
+| Node version | `20` (via `build.environment`) |
 
-[build.environment]
-  NODE_VERSION = "20"
-```
+> Detail konfigurasi lengkap akan ditulis saat implementasi; dokumen ini hanya menetapkan nilai kontraknya.
 
 ### Mandatory Environment Variables
 
@@ -530,40 +460,20 @@ sequenceDiagram
 - Sesi admin = **custom JWT** (`jose`), konsisten dengan student.
 - Cabut akses admin: set `admin_whitelist.is_active = false` + increment `auth_epoch`.
 
-### 7.3 Middleware Guard (`src/middleware.ts`)
+### 7.3 Middleware Guard
 
-```typescript
-// src/lib/auth/guards.ts
-export type Session =
-  | { role: "guest" }
-  | { role: "student"; epoch: number }
-  | { role: "admin"; email: string; epoch: number };
+**Alur logika middleware (pseudocode):**
 
-// src/middleware.ts (pseudocode)
-const STUDENT_PATHS = ["/students", "/directory", "/gallery", "/api/students", "/api/gallery"];
-const ADMIN_PATHS   = ["/admin", "/api/admin", "/api/upload"];
+1. Baca & verifikasi JWT dari cookie → dapatkan `session` (`guest` / `student` / `admin`).
+2. Baca `auth_epoch` saat ini dari `app_config` (dengan cache).
+3. Jika `session` memiliki `epoch` dan `session.epoch ≠ currentEpoch` → **tolak (401) + clear cookie** (sesi telah dicabut).
+4. Jika path termasuk `ADMIN_PATHS` (`/admin`, `/api/admin`, `/api/upload`):
+   - jika `session.role ≠ admin` → tolak.
+5. Selain itu, jika path termasuk `STUDENT_PATHS` (`/students`, `/directory`, `/gallery`, `/api/students`, `/api/gallery`):
+   - jika `session.role = guest` → tolak.
+6. Selain semua itu → lanjutkan request.
 
-export async function middleware(req: NextRequest) {
-  const session = await getSession(req); // parse & verify JWT cookie (jose)
-  const epoch = await getAuthEpoch();    // baca app_config.auth_epoch (cache)
-
-  // Pencabutan sesi seketika: token dengan epoch lama otomatis ditolak
-  if ("epoch" in session && session.epoch !== epoch) {
-    return clearSessionAndUnauthorized(req);
-  }
-
-  if (matches(ADMIN_PATHS, req.nextUrl.pathname)) {
-    if (session.role !== "admin") return unauthorized(req);
-  } else if (matches(STUDENT_PATHS, req.nextUrl.pathname)) {
-    if (session.role === "guest") return unauthorized(req);
-  }
-  return NextResponse.next();
-}
-
-export const config = {
-  matcher: ["/students/:path*", "/directory", "/gallery", "/admin/:path*", "/api/:path*"],
-};
-```
+Matcher middleware mencakup: `/students/*`, `/directory`, `/gallery`, `/admin/*`, `/api/*`.
 
 **Konvensi status code:** `401` = belum terautentikasi, `403` = terautentikasi tapi role kurang.
 
@@ -640,11 +550,7 @@ src/
 
 ### 9.2 Token Epoch — Pencabutan Sesi Seketika
 
-JWT bersifat stateless sehingga tidak bisa dicabut begitu saja. Solusinya: klaim `epoch` di JWT yang dibandingkan dengan `app_config.auth_epoch`.
-
-```
-app_config: key='auth_epoch', value='5'
-```
+JWT bersifat stateless sehingga tidak bisa dicabut begitu saja. Solusinya: klaim `epoch` di JWT yang dibandingkan dengan `app_config.auth_epoch` (contoh nilai: `5`).
 
 - Setiap JWT (student & admin) menyimpan `epoch` saat diterbitkan.
 - Middleware membandingkan `jwt.epoch === currentEpoch`; jika tidak sama → **tolak (401) + clear cookie**.
@@ -665,18 +571,18 @@ app_config: key='auth_epoch', value='5'
 
 Passcode angkatan disimpan sebagai **bcrypt hash** di `app_config`, bukan plaintext di env.
 
-```sql
--- Seed awal (jalankan via seeder / SQL admin, ganti <HASH> dgn bcrypt hash)
-INSERT INTO app_config (key, value, description) VALUES
-  ('angkatan_passcode', '<BCRYPT_HASH>', 'Shared secret untuk akses directory & galeri angkatan'),
-  ('auth_epoch',        '1',             'Epoch sesi; increment untuk mencabut semua sesi');
-```
+**Data awal yang perlu di-seed** (`app_config`):
 
+| key | value | deskripsi |
+| :--- | :--- | :--- |
+| `angkatan_passcode` | bcrypt hash passcode | Shared secret akses directory & galeri |
+| `auth_epoch` | `1` (integer) | Epoch sesi; increment untuk mencabut semua sesi |
+
+**Aturan operasional:**
 - **Baca/ubah hanya via backend** (koneksi privileged); `anon`/`authenticated` ditolak RLS.
 - Ganti passcode: `PATCH /api/admin/config` → bcrypt hash baru + increment `auth_epoch`. Tanpa redeploy.
-- Seeder/CLI menghasilkan hash: `bcrypt.hash(passcode, 12)`.
-- **Whitelist admin**: kelola langsung via Supabase SQL / Table Editor:
-  ```sql
-  INSERT INTO admin_whitelist (email, display_name, is_active)
-  VALUES ('pengurus@gmail.com', 'Pengurus 1', true);
-  ```
+- Seeder/CLI menghasilkan hash bcrypt (cost factor 12).
+
+**Manajemen whitelist admin** (dikelola langsung via Supabase SQL / Table Editor, bukan via API):
+- Menambah admin: sisipkan baris `admin_whitelist` dengan `email`, `display_name`, `is_active = true`.
+- Mencabut akses: set `is_active = false` pada email terkait, lalu increment `auth_epoch` agar sesi aktif langsung mati.
