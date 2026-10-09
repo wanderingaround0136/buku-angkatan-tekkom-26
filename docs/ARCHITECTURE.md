@@ -8,17 +8,18 @@ Document Source of Truth arsitektur backend **Web Buku Angkatan**.
 
 | Layer | Technology | Infrastructure / Free Tier Provider |
 | :--- | :--- | :--- |
-| **Framework** | Next.js (App Router) | Netlify Serverless Functions |
+| **Framework** | Next.js 16 (App Router) | Netlify Serverless Functions |
 | **Language** | TypeScript | Node.js Runtime |
 | **Database** | PostgreSQL | Supabase (Free Tier) |
-| **ORM** | Prisma / Drizzle | Type-safe Query Builder & Migration Engine |
+| **ORM** | Drizzle ORM + Drizzle Kit | Type-safe Query Builder & Migration Engine |
+| **Package Manager** | pnpm | — |
 | **Object Storage** | S3-Compatible Storage | Cloudflare R2 (Free Tier) |
 | **S3 SDK** | `@aws-sdk/client-s3` | Presigned URL Upload & S3 Commands |
 | **Email (OTP)** | Resend | Transactional Email Service |
 | **Auth Token** | `jose` (JWT, HS256) | Custom session untuk student & admin |
 | **Validation** | Zod | Runtime Schema Validation & Sanitization |
 
-> **Catatan arsitektur**: Aplikasi **tidak** memakai Supabase Auth. Semua autentikasi (student passcode & admin OTP) dikelola aplikasi sendiri menggunakan JWT (`jose`) yang disimpan di HttpOnly cookie. Backend mengakses Supabase PostgreSQL via koneksi Postgres langsung (Prisma/Drizzle).
+> **Catatan arsitektur**: Aplikasi **tidak** memakai Supabase Auth. Semua autentikasi (student passcode & admin OTP) dikelola aplikasi sendiri menggunakan JWT (`jose`) yang disimpan di HttpOnly cookie. Backend mengakses Supabase PostgreSQL via koneksi Postgres langsung (Drizzle + driver `postgres`).
 
 ---
 
@@ -225,11 +226,11 @@ erDiagram
 ### Connection Pooling (Supabase)
 Supabase menyediakan 2 mode URL koneksi:
 - `DATABASE_URL`: Transaction Mode Pooler (Port `6543`) — Digunakan oleh App Runtime / Serverless API Next.js.
-- `DIRECT_URL`: Direct Connection (Port `5432`) — Digunakan oleh Prisma/Drizzle CLI untuk `db push` / `migrate`.
+- `DIRECT_URL`: Direct Connection (Port `5432`) — Digunakan oleh Drizzle Kit untuk `db push` / `migrate`.
 
 ### Row Level Security (RLS) — Defense-in-Depth
 
-Karena aplikasi **tidak** memakai Supabase Auth, penegakan akses utama ada di **layer aplikasi** (middleware + guards + Prisma query scoping). RLS di sini berperan sebagai **lapis pertahanan terakhir** untuk mencegah **akses langsung** ke DB (mis. bila seseorang mendapat koneksi Postgres atau anon key).
+Karena aplikasi **tidak** memakai Supabase Auth, penegakan akses utama ada di **layer aplikasi** (middleware + guards + query scoping via Drizzle). RLS di sini berperan sebagai **lapis pertahanan terakhir** untuk mencegah **akses langsung** ke DB (mis. bila seseorang mendapat koneksi Postgres atau anon key).
 
 **Prinsip**: Aplikasi hanya mengakses DB via koneksi server-side (Postgres direct). RLS dikonfigurasi untuk **menolak seluruh akses dari role `anon` dan `authenticated`**, sehingga tabel hanya bisa diakses oleh koneksi privileged (role `postgres` / service role) yang dipakai backend.
 
@@ -278,7 +279,7 @@ Karena aplikasi **tidak** memakai Supabase Auth, penegakan akses utama ada di **
 
 ## 5. Validation Layer Specification
 
-Semua input (API handler & seeder) divalidasi dengan Zod. Lokasi file: `src/lib/validations/student.ts` (+ `auth.ts`).
+Semua input (API handler & seeder) divalidasi dengan Zod. Lokasi file: `lib/validations/student.ts` (+ `auth.ts`).
 
 ### 5.1 Sanitizer Helpers
 
@@ -311,7 +312,7 @@ File `netlify.toml` di root project menetapkan:
 
 | Setting | Nilai |
 | :--- | :--- |
-| Build command | `npm run build` |
+| Build command | `pnpm build` |
 | Publish directory | `.next` |
 | Plugin | `@netlify/plugin-nextjs` (adapter Next.js App Router → serverless) |
 | Node version | `20` (via `build.environment`) |
@@ -516,21 +517,32 @@ Matcher middleware mencakup: `/students/*`, `/directory`, `/gallery`, `/admin/*`
 
 ### Struktur Folder Tambahan
 
+> Struktur mengikuti project aktual: App Router di root `app/` (bukan `src/app/`), dan Drizzle di folder `db/`.
+
 ```
-src/
-├── middleware.ts                     # Route guard global
-└── lib/
-    ├── auth/
-    │   ├── jwt.ts                    # sign/verify JWT (jose)
-    │   ├── session.ts                # getSession(), getAuthEpoch()
-    │   ├── otp.ts                    # generate & verify OTP admin
-    │   └── guards.ts                 # requireStudent(), requireAdmin()
-    ├── email/
-    │   └── resend.ts                 # kirim email OTP via Resend
-    ├── config/
-    │   └── app-config.ts             # baca/tulis app_config (passcode, epoch)
-    └── audit/
-        └── logger.ts                 # tulis audit_logs
+db/
+├── schema.ts                         # Definisi tabel Drizzle (source of truth skema)
+├── index.ts                          # Inisialisasi Drizzle client (runtime, DATABASE_URL)
+├── seed.ts                           # Seeder development (data dummy)
+└── migrations/                       # Hasil generate drizzle-kit
+
+lib/
+├── auth/
+│   ├── jwt.ts                        # sign/verify JWT (jose)
+│   ├── session.ts                    # getSession(), getAuthEpoch()
+│   ├── otp.ts                        # generate & verify OTP admin
+│   └── guards.ts                     # requireStudent(), requireAdmin()
+├── email/
+│   └── resend.ts                     # kirim email OTP via Resend
+├── config/
+│   └── app-config.ts                 # baca/tulis app_config (passcode, epoch)
+├── validations/
+│   └── student.ts                    # skema Zod (student + auth)
+└── audit/
+    └── logger.ts                     # tulis audit_logs
+
+middleware.ts                         # Route guard global (di root, sejajar app/)
+drizzle.config.ts                     # Konfigurasi Drizzle Kit (pakai DIRECT_URL)
 ```
 
 ---

@@ -27,12 +27,13 @@ Backend untuk **Web Buku Angkatan**, dibangun dari data Google Form yang sudah d
 | Tool | Versi / Catatan | Cara Cek |
 | :--- | :--- | :--- |
 | **Node.js** | Versi **20 LTS** (jangan lebih lama) | `node -v` |
-| **npm** | Otomatis ikut saat install Node.js | `npm -v` |
+| **pnpm** | Package manager project ini (`pnpm@11`) | `pnpm -v` |
 | **Git** | Versi terbaru | `git --version` |
 | **Code Editor** | **VS Code** atau **OpenCode** | — |
 
 **Cara install singkat:**
 - Node.js: unduh installer dari [nodejs.org](https://nodejs.org) (pilih **LTS**), lalu install seperti biasa.
+- pnpm: setelah Node.js terinstall, jalankan `npm install -g pnpm` (atau lihat [pnpm.io/installation](https://pnpm.io/installation)).
 - Git: unduh dari [git-scm.com](https://git-scm.com).
 - VS Code: unduh dari [code.visualstudio.com](https://code.visualstudio.com).
 
@@ -103,7 +104,7 @@ Lalu buka file `.env` di editor dan isi nilainya.
 Install semua library yang dibutuhkan project:
 
 ```bash
-npm install
+pnpm install
 ```
 
 Proses ini akan mengunduh semua package. Tunggu sampai selesai (biasanya 1–3 menit). Kalau muncul banyak tulisan lalu berhenti tanpa error, berarti berhasil.
@@ -112,13 +113,15 @@ Proses ini akan mengunduh semua package. Tunggu sampai selesai (biasanya 1–3 m
 
 ## 5. Setup & Push Database
 
+> ⚠️ **Status:** Skema tabel (`db/schema.ts`) belum dibuat — sedang dikerjakan secara terpisah. Langkah ini baru bisa dijalankan setelah skema tersedia.
+
 Langkah ini membuat tabel-tabel database sesuai skema project. Jalankan:
 
 ```bash
-npx drizzle-kit push
+pnpm db:push
 ```
 
-- Perintah ini membaca skema Drizzle dan **membuat/menyinkronkan tabel** ke database Supabase kamu.
+- Perintah ini membaca skema Drizzle di `db/schema.ts` dan **membuat/menyinkronkan tabel** ke database Supabase kamu.
 - Jika diminta konfirmasi, jawab **yes**.
 
 > ⚠️ Pastikan `DATABASE_URL` dan `DIRECT_URL` sudah benar di `.env` sebelum langkah ini, jika tidak akan muncul error koneksi.
@@ -127,18 +130,20 @@ npx drizzle-kit push
 
 ## 6. Jalankan Seeder (Dummy Data)
 
-Seeder **development** ini mengisi database dengan data contoh supaya kamu bisa langsung mengembangkan & menguji API tanpa menunggu data asli.
+> ⚠️ **Status:** Seeder belum tersedia — menunggu skema database selesai dibuat. Script `db:seed` akan ditambahkan kemudian.
+
+Seeder **development** akan mengisi database dengan data contoh supaya kamu bisa langsung mengembangkan & menguji API tanpa menunggu data asli. Rencananya dijalankan dengan:
 
 ```bash
-npm run seed
+pnpm db:seed
 ```
 
-Seeder ini akan mengisi:
+Seeder ini nantinya akan mengisi:
 - Beberapa data siswa dummy (nama, NIM, kelas, dll.)
 - Passcode angkatan (dummy) — dipakai untuk uji akses halaman directory/galeri
 - Beberapa email admin dummy di whitelist — dipakai untuk uji login admin
 
-> 📌 **Catatan:** `npm run seed` **khusus untuk development**. Untuk mengisi data **produksi** dari hasil ekspor Google Form asli, gunakan script seeder terpisah yang mengambil data dari CSV Google Form (lihat [docs/SEEDING_GUIDE.md](./docs/SEEDING_GUIDE.md)).
+> 📌 **Catatan:** Seeder **khusus untuk development**. Untuk mengisi data **produksi** dari hasil ekspor Google Form asli, gunakan script seeder terpisah yang mengambil data dari CSV Google Form (lihat [docs/SEEDING_GUIDE.md](./docs/SEEDING_GUIDE.md)).
 
 ---
 
@@ -147,7 +152,7 @@ Seeder ini akan mengisi:
 Nyalakan server lokal:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Lalu buka browser ke:
@@ -174,14 +179,14 @@ npx netlify dev
 
 | Gejala | Kemungkinan Penyebab | Solusi |
 | :--- | :--- | :--- |
-| **Port 3000 sudah terpakai** | Ada proses lain yang jalan di port itu | Tutup proses lama, atau jalankan `npm run dev -- -p 3001` untuk ganti port |
+| **Port 3000 sudah terpakai** | Ada proses lain yang jalan di port itu | Tutup proses lama, atau jalankan `pnpm dev -- -p 3001` untuk ganti port |
 | **Koneksi database gagal** | `DATABASE_URL`/`DIRECT_URL` salah, atau IP belum diizinkan | Cek ulang string koneksi di `.env`; pastikan password benar |
 | **Env tidak terbaca / undefined** | Lupa copy `.env` dari template | Pastikan file `.env` sudah ada di root project dan terisi |
-| **`npm run seed` gagal** | Database belum di-push | Jalankan **Step 5** (`npx drizzle-kit push`) terlebih dahulu |
-| **Error Drizzle client / skema tidak ketemu** | Perlu generate ulang | Jalankan `npx drizzle-kit generate` lalu ulangi push |
+| **Skema tidak ditemukan (`db/schema.ts`)** | Skema belum dibuat | Skema dikerjakan terpisah; lihat [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) Section 2 |
+| **Error Drizzle client / skema tidak ketemu** | Perlu generate ulang | Jalankan `pnpm db:generate` lalu ulangi push |
 | **Login admin tidak mengirim OTP** | `RESEND_API_KEY` belum diisi | Isi `RESEND_API_KEY` & `RESEND_FROM_EMAIL`, atau uji fitur non-admin dulu |
 | **Upload foto gagal** | Variabel `R2_*` belum diisi | Isi semua variabel `R2_*` di `.env` |
-| **`npm install` error** | Versi Node.js tidak sesuai | Pastikan Node.js versi **20 LTS** (`node -v`) |
+| **`pnpm install` error** | Versi Node.js tidak sesuai | Pastikan Node.js versi **20 LTS** (`node -v`) |
 
 > 💡 Kalau masih stuck: cek pesan error di terminal dari baris paling bawah, lalu cari kata kuncinya di dokumentasi `docs/` atau tanyakan ke tim.
 
@@ -204,15 +209,40 @@ npx netlify dev
 
 ## Tech Stack Overview
 
-- **Framework**: Next.js App Router (TypeScript)
+- **Framework**: Next.js 16 (App Router, TypeScript)
 - **Database**: Supabase (PostgreSQL Free Tier)
-- **ORM**: Drizzle ORM
+- **ORM**: Drizzle ORM + Drizzle Kit (driver `postgres`)
 - **Auth**: Custom JWT (`jose`, HttpOnly cookie) — Angkatan Passcode untuk student · Whitelist email + OTP (Resend) untuk admin
 - **Object Storage**: Cloudflare R2 (Free Tier) via `@aws-sdk/client-s3`
 - **Email**: Resend (OTP admin)
 - **Hosting / Deployment**: Netlify (Serverless Functions)
 - **Validation**: Zod
+- **Package Manager**: pnpm
 - **Frontend Stack**: _(akan ditambahkan seiring pengembangan UI/UX)_
+
+**Struktur database & tooling (saat ini):**
+
+```
+project-buku-angkatan/
+├── app/                    # Next.js App Router (di root, bukan src/)
+├── db/
+│   └── index.ts            # Konektor Drizzle client (runtime)
+│                           # (db/schema.ts → akan dibuat terpisah)
+├── drizzle.config.ts       # Konfigurasi Drizzle Kit (pakai DIRECT_URL)
+├── .env.example            # Template environment variables
+└── docs/                   # Source of Truth (arsitektur & spesifikasi)
+```
+
+> ℹ️ **Catatan:** Konektor database (`db/index.ts`) sudah siap. **Skema tabel (`db/schema.ts`)** dikerjakan secara terpisah — lihat [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) Section 2 untuk rancangan tabel.
+
+**Script database (`package.json`):**
+
+| Script | Fungsi |
+| :--- | :--- |
+| `pnpm db:generate` | Generate file migrasi dari `db/schema.ts` |
+| `pnpm db:push` | Push skema langsung ke database |
+| `pnpm db:migrate` | Jalankan migrasi yang sudah di-generate |
+| `pnpm db:studio` | Buka Drizzle Studio (GUI database) |
 
 ---
 

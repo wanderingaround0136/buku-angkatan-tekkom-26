@@ -18,10 +18,10 @@ EPIC 1 → 2 → 3 → {4, 5, 6} → {7, 8, 9, 10} → 11 → 12
 ## EPIC 1 — Foundation & Infrastructure 🔴
 *Scaffold project, DB, env, tooling.*
 
-- [ ] **1.1** Init project Next.js App Router + TypeScript strict mode
-- [ ] **1.2** Setup Tailwind + struktur folder (`src/app`, `src/lib`, `scripts`)
-- [ ] **1.3** Pilih & setup ORM (Prisma/Drizzle) + config `DATABASE_URL`/`DIRECT_URL`
-- [ ] **1.4** Buat `.env.example` + validasi env via Zod (`src/lib/env.ts`)
+- [x] **1.1** Init project Next.js App Router + TypeScript strict mode
+- [x] **1.2** Setup Tailwind + struktur folder (`app/`, `lib/`, `db/`, `scripts/`)
+- [x] **1.3** Setup ORM **Drizzle** + konektor (`db/index.ts`) + config `DATABASE_URL`/`DIRECT_URL`
+- [x] **1.4** Buat `.env.example` + validasi env via Zod (`lib/env.ts`)
 - [ ] **1.5** Buat Supabase project + jalankan migrasi awal
 - [ ] **1.6** Setup `netlify.toml` + Next.js plugin (dasar)
 - [ ] **1.7** Setup linter/formatter (ESLint + Prettier) + path alias (`@/*`)
@@ -53,20 +53,20 @@ EPIC 1 → 2 → 3 → {4, 5, 6} → {7, 8, 9, 10} → 11 → 12
 ## EPIC 4 — Auth: Angkatan Passcode (Role student) 🔴
 *Gerbang akses internal angkatan.*
 
-- [ ] **4.1** Helper `src/lib/config/app-config.ts` (baca/tulis `app_config`)
-- [ ] **4.2** Helper `src/lib/auth/jwt.ts` (`sign`/`verify` via `jose`)
-- [ ] **4.3** Helper `src/lib/auth/session.ts` (`getSession()`, `getAuthEpoch()`)
+- [ ] **4.1** Helper `lib/config/app-config.ts` (baca/tulis `app_config`)
+- [ ] **4.2** Helper `lib/auth/jwt.ts` (`sign`/`verify` via `jose`)
+- [ ] **4.3** Helper `lib/auth/session.ts` (`getSession()`, `getAuthEpoch()`)
 - [ ] **4.4** Rate limiter utility (in-memory dev → Upstash Redis prod)
 - [ ] **4.5** `POST /api/auth/passcode` (verify bcrypt + set cookie HttpOnly)
 - [ ] **4.6** `DELETE /api/auth/passcode` (logout / clear cookie)
 - [ ] **4.7** `GET /api/auth/session` (status role)
-- [ ] **4.8** `src/middleware.ts` guard `STUDENT_PATHS` + cek `epoch`
+- [ ] **4.8** `middleware.ts` guard `STUDENT_PATHS` + cek `epoch`
 
 ## EPIC 5 — Auth: Admin Whitelist + OTP (Role admin) 🔴
 *Login passwordless admin via email OTP.*
 
-- [ ] **5.1** Helper `src/lib/auth/otp.ts` (generate 6 digit + hash + verify)
-- [ ] **5.2** Helper `src/lib/email/resend.ts` (kirim OTP)
+- [ ] **5.1** Helper `lib/auth/otp.ts` (generate 6 digit + hash + verify)
+- [ ] **5.2** Helper `lib/email/resend.ts` (kirim OTP)
 - [ ] **5.3** `POST /api/auth/admin/request-otp` (cek whitelist, rate-limit, selalu 200 generik)
 - [ ] **5.4** `POST /api/auth/admin/verify-otp` (validasi, set `admin_session`, audit `ADMIN_LOGIN`)
 - [ ] **5.5** `POST /api/auth/admin/logout`
@@ -76,7 +76,7 @@ EPIC 1 → 2 → 3 → {4, 5, 6} → {7, 8, 9, 10} → 11 → 12
 ## EPIC 6 — Audit & Security Helpers 🟡
 *Jejak audit + hardening keamanan.*
 
-- [ ] **6.1** Helper `src/lib/audit/logger.ts` (tulis `audit_logs`)
+- [ ] **6.1** Helper `lib/audit/logger.ts` (tulis `audit_logs`)
 - [ ] **6.2** Helper ekstrak `ip` + `user_agent` dari request
 - [ ] **6.3** Implementasi Token Epoch (bump `auth_epoch` untuk cabut sesi)
 - [ ] **6.4** Query scoping utility (pilih kolom eksplisit; cegah `SELECT *` pada data sensitif)
@@ -110,7 +110,7 @@ EPIC 1 → 2 → 3 → {4, 5, 6} → {7, 8, 9, 10} → 11 → 12
 ## EPIC 10 — Storage: Cloudflare R2 🟡
 *Upload/ganti foto (admin-only).*
 
-- [ ] **10.1** Helper `src/lib/storage/r2.ts` (S3 client + presign)
+- [ ] **10.1** Helper `lib/storage/r2.ts` (S3 client + presign)
 - [ ] **10.2** Setup bucket + CORS + custom domain
 - [ ] **10.3** `POST /api/upload` (presigned PUT, expired 5 menit)
 - [ ] **10.4** Validasi tipe/ukuran file + naming convention (`folder/nim-*.jpg`)

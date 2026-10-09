@@ -99,7 +99,7 @@ Struktur mapping header Google Form CSV ke tabel database:
 ## 4. Execution Guide
 
 ### Prerequisites
-Pastikan file `.env.local` sudah terisi dengan credential Supabase & Cloudflare R2.
+Pastikan file `.env` sudah terisi dengan credential Supabase & Cloudflare R2.
 
 ### Step 1: Letakkan File Export CSV
 Simpan file ekspor Google Form di folder data (atau buat folder `data/` jika belum ada):
@@ -112,14 +112,14 @@ cp ~/Downloads/data-buku-angkatan.csv data/input.csv
 Jalankan script menggunakan `tsx` / `ts-node`:
 
 ```bash
-npx tsx scripts/seed-from-csv.ts data/input.csv
+pnpm exec tsx scripts/seed-from-csv.ts data/input.csv
 ```
 
 ### Dry Run / Testing Mode
 Untuk menguji sanitasi tanpa melakukan insert ke database & upload R2:
 
 ```bash
-npx tsx scripts/seed-from-csv.ts data/input.csv --dry-run
+pnpm exec tsx scripts/seed-from-csv.ts data/input.csv --dry-run
 ```
 
 ---
@@ -136,7 +136,7 @@ Disimpan sebagai bcrypt hash (bukan plaintext). Dua baris yang perlu disisipkan:
 | `angkatan_passcode` | bcrypt hash passcode | Shared secret akses directory & galeri |
 | `auth_epoch` | `1` (integer) | Epoch sesi; increment untuk mencabut semua sesi |
 
-Script helper (opsional) `scripts/seed-auth.ts` dapat men-generate hash dan menyisipkan baris di atas, dipanggil dengan argumen passcode, contoh: `npx tsx scripts/seed-auth.ts --passcode "angkatan2022secret"`.
+Script helper (opsional) `scripts/seed-auth.ts` dapat men-generate hash dan menyisipkan baris di atas, dipanggil dengan argumen passcode, contoh: `pnpm exec tsx scripts/seed-auth.ts --passcode "angkatan2022secret"`.
 
 ### B. Whitelist Admin (`admin_whitelist`)
 Dikelola **langsung via SQL / Supabase Table Editor** (bukan via API dashboard). Whitelist bersifat **per email individu**, bukan domain.

@@ -26,7 +26,7 @@ Panduan Git Flow, konvensi commit, dan Vibe Coding rules untuk tim dev & AI Assi
 
 ## 2. Directory & File Conventions
 
-Struktur folder backend Next.js App Router:
+Struktur folder project (Next.js App Router + Drizzle, di root):
 
 ```
 project-buku-angkatan/
@@ -35,46 +35,51 @@ project-buku-angkatan/
 │   ├── API_CONTRACTS.md
 │   ├── SEEDING_GUIDE.md
 │   ├── CONTRIBUTING.md
-│   └── PROJECT_PLAN.md
-├── scripts/                    # CLI Utilities & Seeders
+│   ├── PROJECT_PLAN.md
+│   └── IMPLEMENTATION_PLAN.md
+├── scripts/                    # CLI Utilities & Seeder produksi
 │   └── seed-from-csv.ts
-├── src/
-│   ├── middleware.ts           # Route guard global (student & admin)
-│   ├── app/
-│   │   ├── api/                # Next.js Serverless API Route Handlers
-│   │   │   ├── auth/
-│   │   │   │   ├── passcode/route.ts
-│   │   │   │   └── admin/{request-otp,verify-otp,logout}/route.ts
-│   │   │   ├── public/stats/route.ts
-│   │   │   ├── classes/route.ts
-│   │   │   ├── students/{route.ts,[nim]/route.ts}
-│   │   │   ├── gallery/route.ts
-│   │   │   ├── upload/route.ts
-│   │   │   └── admin/{students,emergencies,config,audit-logs,export}/route.ts
-│   │   └── (pages)             # Landing, /unlock, /directory, /gallery, /admin/*
-│   ├── lib/
-│   │   ├── db/                 # Drizzle Client Setup
-│   │   │   └── client.ts
-│   │   ├── auth/               # JWT, session, OTP, guards
-│   │   │   ├── jwt.ts
-│   │   │   ├── session.ts
-│   │   │   ├── otp.ts
-│   │   │   └── guards.ts
-│   │   ├── email/              # Resend client
-│   │   │   └── resend.ts
-│   │   ├── config/             # app_config (passcode, auth_epoch)
-│   │   │   └── app-config.ts
-│   │   ├── audit/              # audit_logs writer
-│   │   │   └── logger.ts
-│   │   ├── storage/            # Cloudflare R2 Helper
-│   │   │   └── r2.ts
-│   │   └── validations/        # Zod Schemas
-│   │       └── student.ts
-│   └── types/                  # Shared TypeScript Interfaces
+├── app/                        # Next.js App Router (di root, bukan src/)
+│   ├── api/                    # Serverless API Route Handlers
+│   │   ├── auth/
+│   │   │   ├── passcode/route.ts
+│   │   │   └── admin/{request-otp,verify-otp,logout}/route.ts
+│   │   ├── public/stats/route.ts
+│   │   ├── classes/route.ts
+│   │   ├── students/{route.ts,[nim]/route.ts}
+│   │   ├── gallery/route.ts
+│   │   ├── upload/route.ts
+│   │   └── admin/{students,emergencies,config,audit-logs,export}/route.ts
+│   └── (pages)                 # Landing, /unlock, /directory, /gallery, /admin/*
+├── db/                         # Drizzle ORM
+│   ├── schema.ts               # Definisi tabel (source of truth skema)
+│   ├── index.ts                # Drizzle client (runtime)
+│   ├── seed.ts                 # Seeder development (data dummy)
+│   └── migrations/             # Hasil generate drizzle-kit
+├── lib/
+│   ├── auth/                   # JWT, session, OTP, guards
+│   │   ├── jwt.ts
+│   │   ├── session.ts
+│   │   ├── otp.ts
+│   │   └── guards.ts
+│   ├── email/                  # Resend client
+│   │   └── resend.ts
+│   ├── config/                 # app_config (passcode, auth_epoch)
+│   │   └── app-config.ts
+│   ├── audit/                  # audit_logs writer
+│   │   └── logger.ts
+│   ├── storage/                # Cloudflare R2 Helper
+│   │   └── r2.ts
+│   └── validations/            # Zod Schemas
+│       └── student.ts
+├── middleware.ts               # Route guard global (student & admin)
+├── drizzle.config.ts           # Konfigurasi Drizzle Kit
 ├── netlify.toml                # Netlify Deployment Settings
 ├── .env.example                # Template Environment Variables
 └── README.md
 ```
+
+> ℹ️ **Catatan struktur**: Project ini **tidak** memakai folder `src/`. App Router ada di `app/` root, Drizzle di `db/`, dan helper di `lib/`. Path alias `@/*` mengarah ke root (`./*`).
 
 ---
 
@@ -105,7 +110,7 @@ Buat branch baru dari `develop` untuk setiap pekerjaan:
 ### Aturan Pull Request
 - Judul PR mengikuti format commit (mis. `feat: add GET /api/students`).
 - Sertakan deskripsi singkat: apa yang diubah & kenapa.
-- Pastikan `npm run build` / lint lolos sebelum minta review.
+- Pastikan `pnpm build` / lint lolos sebelum minta review.
 - Jangan merge PR ke `main` langsung tanpa lewat `develop` (kecuali hotfix darurat).
 
 ---

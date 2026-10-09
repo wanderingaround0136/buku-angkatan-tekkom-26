@@ -22,13 +22,13 @@ Model akses: **3 role** — `guest` (landing saja), `student` (passcode → dire
 - [ ] Setup Bucket Cloudflare R2 (`buku-angkatan-assets`) & Custom Domain CDN / Public R2 URL.
 - [ ] Konfigurasi CORS pada Cloudflare R2 bucket untuk presigned upload URL.
 - [ ] Setup Resend (API key + verifikasi domain pengirim).
-- [ ] Buat file `.env.example` dan `.env.local`.
+- [ ] Buat file `.env.example` dan `.env`.
 - [ ] Definisikan model ORM: `Student`, `StudentContact`, `StudentProfile`, `StudentEmergency`, `AppConfig`, `AdminWhitelist`, `AdminOtp`, `AuditLog`.
 - [ ] Jalankan `db push` / `migrate` ke Supabase menggunakan `DIRECT_URL`.
 - [ ] Jalankan SQL Script RLS (Section 3 ARCHITECTURE.md) — tolak akses `anon`/`authenticated`.
-- [ ] Tulis Zod Validation Schemas di `src/lib/validations/student.ts` (+ auth schemas).
-- [ ] Buat helper `src/lib/audit/logger.ts` (tulis `audit_logs`).
-- [ ] Buat helper `src/lib/config/app-config.ts` (baca/tulis `app_config`: passcode & `auth_epoch`).
+- [ ] Tulis Zod Validation Schemas di `lib/validations/student.ts` (+ auth schemas).
+- [ ] Buat helper `lib/audit/logger.ts` (tulis `audit_logs`).
+- [ ] Buat helper `lib/config/app-config.ts` (baca/tulis `app_config`: passcode & `auth_epoch`).
 
 ---
 
@@ -42,12 +42,12 @@ Model akses: **3 role** — `guest` (landing saja), `student` (passcode → dire
 
 ### Milestone B: Passcode Access (student)
 - [ ] Seed passcode awal + `auth_epoch` ke `app_config` (bcrypt hash).
-- [ ] Helper `src/lib/auth/jwt.ts` (sign/verify JWT via `jose`).
-- [ ] Helper `src/lib/auth/session.ts` (`getSession()`, `getAuthEpoch()`).
+- [ ] Helper `lib/auth/jwt.ts` (sign/verify JWT via `jose`).
+- [ ] Helper `lib/auth/session.ts` (`getSession()`, `getAuthEpoch()`).
 - [ ] Handler `POST /api/auth/passcode` (verifikasi + set cookie HttpOnly) + **rate limiting**.
 - [ ] Handler `DELETE /api/auth/passcode` (logout).
 - [ ] Handler `GET /api/auth/session` (status role).
-- [ ] `src/middleware.ts` guard `STUDENT_PATHS` + cek `epoch`.
+- [ ] `middleware.ts` guard `STUDENT_PATHS` + cek `epoch`.
 - [ ] Handler `GET /api/students` (direktori, pagination, filter, search).
 - [ ] Handler `GET /api/students/:nim` (detail — **tanpa** WA pribadi & alamat kost).
 - [ ] Handler `GET /api/gallery` (galeri foto).
@@ -58,13 +58,13 @@ Model akses: **3 role** — `guest` (landing saja), `student` (passcode → dire
 ### Milestone C: Admin Access (Whitelist + OTP)
 Fokus: login passwordless + dashboard + data darurat. **Semua mutasi data & upload hanya admin.**
 - [ ] Buat tabel `admin_whitelist` + seed email pengurus (via SQL Supabase langsung).
-- [ ] Helper `src/lib/auth/otp.ts` (generate/hash/verify OTP).
-- [ ] Helper `src/lib/email/resend.ts` (kirim OTP via Resend).
+- [ ] Helper `lib/auth/otp.ts` (generate/hash/verify OTP).
+- [ ] Helper `lib/email/resend.ts` (kirim OTP via Resend).
 - [ ] Handler `POST /api/auth/admin/request-otp` (anti-enumeration, rate-limit, selalu 200).
 - [ ] Handler `POST /api/auth/admin/verify-otp` (set cookie `admin_session`, audit `ADMIN_LOGIN`).
 - [ ] Handler `POST /api/auth/admin/logout`.
 - [ ] Middleware guard `ADMIN_PATHS` (`/admin`, `/api/admin`, `/api/upload`).
-- [ ] Helper `src/lib/storage/r2.ts` (S3 Client Cloudflare R2).
+- [ ] Helper `lib/storage/r2.ts` (S3 Client Cloudflare R2).
 - [ ] Handler `POST /api/upload` (R2 Presigned PUT URL — **admin-only**).
 - [ ] Handler CRUD `GET/POST /api/admin/students`, `GET/PATCH/DELETE /api/admin/students/:nim` (audit `MUTATE_STUDENT`).
 - [ ] Handler `GET /api/admin/emergencies` (audit `READ_EMERGENCIES`).
